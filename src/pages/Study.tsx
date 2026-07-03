@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FiltersBar, type CardFilters } from "../features/filters/FiltersBar";
 import { Flashcard } from "../features/flashcards/Flashcard";
 import { buildStudyQueue } from "../features/srs/studyQueue";
 import { loadStudySession, saveStudySession } from "../features/srs/studySession";
+import { useSpeech } from "../hooks/useSpeech";
 import { useCardsStore } from "../store/cardsStore";
 import { useProgressStore } from "../store/progressStore";
 import type { Card, StudyResult } from "../types";
@@ -33,11 +34,66 @@ export function Study() {
   const [queue, setQueue] = useState<Card[]>([]);
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [autoplay, setAutoplay] = useState(false);
+  const { speak, cancel } = useSpeech();
+  const { speak: speakEs, cancel: cancelEs } = useSpeech("es-ES");
 
   useEffect(() => {
     fetchCards();
     fetchProgress();
   }, [fetchCards, fetchProgress]);
+
+  useEffect(() => {
+    const current = queue[index];
+    if (!current) return;
+    speak(current.word);
+    // Cancela el audio si la tarjeta vuelve a cambiar (o se desmonta)
+    // antes de terminar. Sin esto, el doble-invocado de efectos de
+    // StrictMode en desarrollo dispara dos speak() seguidos para la
+    // misma tarjeta y a veces se alcanza a oír un resto de la voz por
+    // defecto del sistema antes de que la segunda llamada la corte.
+    return () => cancel();
+    // Solo debe sonar cuando cambia la tarjeta mostrada, no en cada
+    // render (p. ej. al marcar favorito).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue[index]?.id]);
+
+  useEffect(() => {
+    // En modo autoplay, dos segundos después de la palabra en inglés se
+    // dice también la traducción en español, antes de que se cumplan
+    // los 5s totales para avanzar de tarjeta.
+    if (!autoplay) return;
+    const current = queue[index];
+    if (!current) return;
+
+    const timeoutId = setTimeout(() => {
+      speakEs(current.translation);
+    }, 2000);
+
+    return () => {
+      clearTimeout(timeoutId);
+      cancelEs();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoplay, queue[index]?.id]);
+
+  useEffect(() => {
+    // No avanza mientras la tarjeta está volteada (mostrando la
+    // respuesta): se pausa hasta que vuelva al frente.
+    if (!autoplay || queue.length === 0 || flipped) return;
+
+    const id = setInterval(() => {
+      setIndex((i) => {
+        if (i + 1 >= queue.length) {
+          setAutoplay(false);
+          return i;
+        }
+        return i + 1;
+      });
+    }, 5000);
+
+    return () => clearInterval(id);
+  }, [autoplay, queue.length, flipped]);
 
   const categories = useMemo(
     () => [...new Set(cards.map((card) => card.category))].sort(),
@@ -45,22 +101,30 @@ export function Study() {
   );
 
   const filtersKey = `${filters.category}|${filters.level}|${favoritesOnly}`;
+  const isInitialLoad = useRef(true);
 
   useEffect(() => {
     if (cardsStatus !== "ready" || progressStatus !== "ready") return;
 
-    const saved = loadStudySession(filtersKey);
-    if (saved) {
-      const cardById = new Map(cards.map((c) => [c.id, c]));
-      const restored = saved.cardIds
-        .map((id) => cardById.get(id))
-        .filter((c): c is Card => c !== undefined);
+    // La sesión guardada solo se restaura en la carga inicial (para que
+    // refrescar /study retome donde ibas). Si el usuario cambia de filtro
+    // durante la sesión, siempre arranca en la primera tarjeta de ese
+    // filtro, aunque ya lo hubiera terminado antes hoy mismo.
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      const saved = loadStudySession(filtersKey);
+      if (saved) {
+        const cardById = new Map(cards.map((c) => [c.id, c]));
+        const restored = saved.cardIds
+          .map((id) => cardById.get(id))
+          .filter((c): c is Card => c !== undefined);
 
-      if (restored.length === saved.cardIds.length && restored.length > 0) {
-        setQueue(restored);
-        setIndex(Math.min(saved.index, restored.length - 1));
-        setFlipped(false);
-        return;
+        if (restored.length === saved.cardIds.length && restored.length > 0) {
+          setQueue(restored);
+          setIndex(Math.min(saved.index, restored.length - 1));
+          setFlipped(false);
+          return;
+        }
       }
     }
 
@@ -155,6 +219,8 @@ export function Study() {
             onPrevious={handlePrevious}
             onNext={handleNext}
             hasPrevious={index > 0}
+            autoplay={autoplay}
+            onToggleAutoplay={() => setAutoplay((a) => !a)}
           />
 
           <span className="text-sm text-gray-500">
