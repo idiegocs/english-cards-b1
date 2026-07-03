@@ -66,3 +66,12 @@ export async function putProgress(progress: CardProgress): Promise<void> {
   const db = await getDB();
   await db.put("progress", progress);
 }
+
+export async function putProgressBatch(
+  entries: CardProgress[],
+): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction("progress", "readwrite");
+  await Promise.all(entries.map((entry) => tx.store.put(entry)));
+  await tx.done;
+}

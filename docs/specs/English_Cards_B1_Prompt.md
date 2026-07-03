@@ -1,11 +1,11 @@
-# PROMPT — English Cards B1
+# PROMPT — English Cards
 
 Quiero que actúes como un Arquitecto de Software Senior, UX/UI Designer
 y Senior Frontend Engineer.
 
 ## 1. Visión y usuario objetivo
 
-**English Cards B1** es una app web de flashcards para hispanohablantes que están
+**English Cards** es una app web de flashcards para hispanohablantes que están
 aprendiendo inglés desde nivel A1 hasta B1. El diferencial frente a apps genéricas
 de flashcards es la **pronunciación adaptada al oído hispanohablante**: cada
 palabra y cada frase de ejemplo incluyen un "respelling" fonético en caracteres
@@ -145,11 +145,12 @@ Para cubrir esto sin agregar backend, se incluye una función de
 El orden en que se muestran las tarjetas (y por lo tanto las imágenes) no es
 aleatorio puro ni sigue el orden del JSON; lo determina el motor de SRS:
 1. Se priorizan tarjetas **vencidas** (`dueDate <= hoy`), las más atrasadas primero.
-2. Se introducen tarjetas **nuevas** (nunca estudiadas) de a poco, respetando
-   un límite diario configurable (por defecto ~10-15 nuevas/día) para no
-   abrumar al usuario con las 300 de golpe.
-3. Si hay un filtro activo (categoría y/o nivel), la cola se limita a esas
-   tarjetas manteniendo la misma prioridad.
+2. Luego se muestran las tarjetas **nuevas** (nunca estudiadas). Sin filtros
+   activos, la cola incluye las 300 tarjetas (vencidas + nuevas); no hay un
+   límite diario que oculte tarjetas — el usuario controla su propio ritmo
+   con los botones Again/Hard/Good/Easy y con "Saltar a la siguiente".
+3. Si hay un filtro activo (categoría, nivel y/o favoritos), la cola se
+   limita a esas tarjetas manteniendo la misma prioridad.
 4. Dentro de un mismo grupo de prioridad, el orden se baraja para que no sea
    predecible de una sesión a otra.
 
@@ -164,9 +165,11 @@ aleatorio puro ni sigue el orden del JSON; lo determina el motor de SRS:
   alimentan el SRS.
 
 ### 6.2 Repetición espaciada
-- Cola de estudio diaria: tarjetas con `dueDate <= hoy`, priorizando las más
-  vencidas.
-- Nuevas tarjetas se introducen gradualmente (límite diario configurable).
+- Cola de estudio: tarjetas con `dueDate <= hoy` primero (las más vencidas
+  antes), seguidas de las tarjetas nunca estudiadas. Sin filtros, incluye
+  las 300 tarjetas — sin límite diario que las oculte.
+- Un botón "Saltar a la siguiente" permite avanzar sin calificar una tarjeta
+  (no actualiza el SRS de esa tarjeta).
 
 ### 6.3 Favoritos
 - Toggle de favorito por tarjeta, filtro dedicado, y modo "repasar solo
@@ -229,9 +232,17 @@ aleatorio puro ni sigue el orden del JSON; lo determina el motor de SRS:
   imagen real, voltearla, y escuchar el audio — sin repetición espaciada
   ni persistencia de progreso todavía.
 
-- **Fase 2 — SRS + persistencia**: algoritmo SM-2, cola de estudio diaria
-  (sección 5.2), favoritos, filtros por categoría/nivel, exportar/importar
-  progreso (sección 6.7).
+- **Fase 2 — SRS + persistencia** ✅: algoritmo SM-2 simplificado
+  (`src/features/srs/sm2.ts`), cola de estudio diaria con prioridad de
+  vencidas/nuevas y barajado por grupo (`src/features/srs/studyQueue.ts`,
+  sección 5.2), favoritos con toggle desde la tarjeta y pantalla dedicada
+  (`src/pages/Favorites.tsx`), filtros combinables por categoría/nivel/solo
+  favoritos (`src/features/filters/FiltersBar.tsx`), y exportar/importar
+  progreso como archivo `.json` fusionando por `cardId`/`updatedAt`
+  (`src/pages/Settings.tsx`, sección 6.7). Progreso persistido en IndexedDB
+  vía `src/store/progressStore.ts`. Verificado en navegador real: respuestas
+  Again/Hard/Good/Easy actualizan el progreso y reordenan la cola, favoritos
+  persisten tras recargar, y exportar dispara la descarga del `.json`.
 - **Fase 3 — Quiz + Estadísticas**: generación de quiz, pantalla de stats,
   rachas.
 - **Fase 4 — PWA + pulido**: offline completo, manifest/ícono, animaciones
