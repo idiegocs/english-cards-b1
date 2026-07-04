@@ -14,17 +14,20 @@ async function fetchCardsFromJSON(): Promise<Card[]> {
 }
 
 /**
- * Devuelve las 300 tarjetas desde IndexedDB. Si es la primera vez que se
- * abre la app (IndexedDB vacío), hidrata desde el JSON fuente primero.
+ * Devuelve las tarjetas desde IndexedDB, hidratándolas desde el JSON fuente
+ * si hace falta. Compara el conteo local contra el JSON (no solo contra 0)
+ * para que las tarjetas agregadas al dataset en el futuro lleguen a
+ * navegadores que ya tenían datos guardados, sin duplicar nada (putCards
+ * hace upsert por id).
  */
 export async function loadCards(): Promise<Card[]> {
   const existingCount = await countCards();
+  const cards = await fetchCardsFromJSON();
 
-  if (existingCount === 0) {
-    const cards = await fetchCardsFromJSON();
+  if (cards.length > existingCount) {
     await putCards(cards);
     return cards;
   }
 
-  return getAllCards();
+  return existingCount === 0 ? cards : getAllCards();
 }

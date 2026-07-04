@@ -33,12 +33,16 @@ cross-device backup path.
 
 ### Data flow
 
-- The 300-card dataset is a static JSON file,
-  `public/english_cards_300_words_template.json` (it must live under
-  `public/` — that's what Vite serves as-is, at the `BASE_URL`, for the
-  runtime `fetch`; it is not bundled/imported into the JS). `src/data/loadCards.ts` fetches it **only on first run** (checked
-  via `countCards()` in IndexedDB) and writes it into IndexedDB; every
-  subsequent load reads from IndexedDB instead of re-fetching the JSON.
+- The card dataset (400 cards as of the Programming category addition) is a
+  static JSON file, `public/english_cards_300_words_template.json` (name is
+  historical; it must live under `public/` — that's what Vite serves as-is,
+  at the `BASE_URL`, for the runtime `fetch`; it is not bundled/imported into
+  the JS). `src/data/loadCards.ts` fetches it on every load and compares its
+  length against `countCards()` in IndexedDB; if the JSON has more cards than
+  IndexedDB, it upserts the JSON into IndexedDB (`putCards` is a per-id
+  `put`, so this never duplicates existing cards) before returning. This is
+  what lets cards added to the JSON later reach browsers that already had an
+  older, smaller dataset stored, without the user clearing site data.
 - `src/db/index.ts` wraps `idb` with two object stores: `cards` (keyed by
   `id`) and `progress` (keyed by `cardId`, one `CardProgress` record per
   card — see `src/types.ts`).
