@@ -26,8 +26,11 @@ export function Study() {
     toggleFavorite,
   } = useProgressStore();
 
-  const [searchParams] = useSearchParams();
-  const [filters, setFilters] = useState<CardFilters>({ category: "", level: "" });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [filters, setFilters] = useState<CardFilters>({
+    category: searchParams.get("category") ?? "",
+    level: "",
+  });
   const [favoritesOnly, setFavoritesOnly] = useState(
     searchParams.get("favorites") === "1",
   );
@@ -99,6 +102,24 @@ export function Study() {
     () => [...new Set(cards.map((card) => card.category))].sort(),
     [cards],
   );
+
+  useEffect(() => {
+    // Refleja la categoría elegida en la URL para que un refresh (o un
+    // enlace copiado) conserve el filtro actual en vez de volver siempre
+    // al que traía la URL original.
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (filters.category) {
+          next.set("category", filters.category);
+        } else {
+          next.delete("category");
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }, [filters.category, setSearchParams]);
 
   const filtersKey = `${filters.category}|${filters.level}|${favoritesOnly}`;
   const isInitialLoad = useRef(true);
